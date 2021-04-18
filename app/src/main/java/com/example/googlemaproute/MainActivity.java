@@ -1,5 +1,7 @@
 package com.example.googlemaproute;
 
+import android.Manifest;
+import android.annotation.SuppressLint;
 import android.content.ActivityNotFoundException;
 import android.content.Context;
 import android.content.DialogInterface;
@@ -9,29 +11,36 @@ import android.location.Location;
 import android.location.LocationManager;
 import android.net.Uri;
 import android.os.Bundle;
+import android.os.Looper;
 import android.provider.Settings;
 import android.view.View;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.Toast;
 
+import androidx.annotation.NonNull;
 import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
 
+import com.google.android.gms.location.FusedLocationProviderClient;
+import com.google.android.gms.location.LocationCallback;
+import com.google.android.gms.location.LocationRequest;
+import com.google.android.gms.location.LocationResult;
+import com.google.android.gms.location.LocationServices;
 import com.google.android.gms.location.LocationSettingsRequest;
+import com.google.android.gms.tasks.OnCompleteListener;
+import com.google.android.gms.tasks.Task;
 
 public class MainActivity extends AppCompatActivity {
 
-    EditText etsource,etdestination;
+    EditText etsource, etdestination;
     Button track;
     private static final int REQUEST_LOCATION = 1;
     LocationManager locationManager;
     String latitude, longitude;
-
-
-
+    FusedLocationProviderClient fusedLocationProviderClient;
 
 
     @Override
@@ -43,97 +52,126 @@ public class MainActivity extends AppCompatActivity {
         etdestination = findViewById(R.id.et_destination);
         track = findViewById(R.id.track);
 
-        
+        fusedLocationProviderClient = LocationServices.getFusedLocationProviderClient(MainActivity.this);
+
 
         try {
-            if (ContextCompat.checkSelfPermission(getApplicationContext(), android.Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED ) {
+            if (ContextCompat.checkSelfPermission(getApplicationContext(), android.Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
                 ActivityCompat.requestPermissions(this, new String[]{android.Manifest.permission.ACCESS_FINE_LOCATION}, 101);
             }
-        } catch (Exception e){
+        } catch (Exception e) {
             e.printStackTrace();
         }
-
-
-
-
-
-
-
 
 
         track.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                locationManager = (LocationManager) getSystemService(Context.LOCATION_SERVICE);
-                if (!locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER)) {
-                    OnGPS();
-                } else {
-                    getLocation();
-                }
+
 
 
                 String source = etsource.getText().toString().trim();
                 String destination = etdestination.getText().toString().trim();
 
-                if(source.equals("") && destination.equals(""))
-                {
+                if (source.equals("") && destination.equals("")) {
                     Toast.makeText(getApplicationContext(), "Enter details Correctly ", Toast.LENGTH_SHORT).show();
-                }
-                else
-                {
-                    DisplayTrack(source,destination);
+                } else {
+
+
+                    if (ActivityCompat.checkSelfPermission(MainActivity.this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
+                            && ActivityCompat.checkSelfPermission(MainActivity.this, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
+                        String res = getCurrentLocation();
+                        String resarray[] = res.split(",");
+//                        while(resarray[0].equals("") && resarray[1].equals(""))
+//                        {
+//                             res = getCurrentLocation();
+//                             resarray = res.split(",");
+//                        }
+//                        if(!(resarray[0].equals("") && resarray[1].equals(""))){
+//                            System.out.println("details for null check :"+latitude+","+longitude);
+//                            DisplayTrack(resarray[0],resarray[1],source); }
+                    }
+                    else
+                    {
+                        ActivityCompat.requestPermissions(MainActivity.this,new String[]{Manifest.permission.ACCESS_FINE_LOCATION,Manifest.permission.ACCESS_COARSE_LOCATION},
+                                100);
+                    }
                 }
 
             }
         });
     }
 
-    private void OnGPS() {
-        final AlertDialog.Builder builder = new AlertDialog.Builder(this);
-        builder.setMessage("Enable GPS").setCancelable(false).setPositiveButton("Yes", new  DialogInterface.OnClickListener() {
-            @Override
-            public void onClick(DialogInterface dialog, int which) {
-                startActivity(new Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS));
-            }
-        }).setNegativeButton("No", new DialogInterface.OnClickListener() {
-            @Override
-            public void onClick(DialogInterface dialog, int which) {
-                dialog.cancel();
-            }
-        });
-        final AlertDialog alertDialog = builder.create();
-        alertDialog.show();
-    }
-    private void getLocation() {
+    @Override
+    public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {
 
-        if ( ContextCompat.checkSelfPermission( this, android.Manifest.permission.ACCESS_COARSE_LOCATION ) != PackageManager.PERMISSION_GRANTED &&
-                ContextCompat.checkSelfPermission( this, android.Manifest.permission.ACCESS_FINE_LOCATION ) != PackageManager.PERMISSION_GRANTED
-           ) {
-
-            ActivityCompat.requestPermissions( this, new String[] {  android.Manifest.permission.ACCESS_COARSE_LOCATION  },
-                    REQUEST_LOCATION);
+        if(requestCode==100 && grantResults.length>0 && (grantResults[0]+grantResults[1]
+        == PackageManager.PERMISSION_GRANTED))
+        {
+            getCurrentLocation();
         }
-
-        else {
-            Location locationGPS = locationManager.getLastKnownLocation(LocationManager.GPS_PROVIDER);
-            if (locationGPS != null) {
-                double lat = locationGPS.getLatitude();
-                double longi = locationGPS.getLongitude();
-                latitude = String.valueOf(lat);
-                longitude = String.valueOf(longi);
-                System.out.println("details:"+latitude+","+longitude);
-                Toast.makeText(this, latitude+","+longitude, Toast.LENGTH_SHORT).show();
-                //showLocation.setText("Your Location: " + "\n" + "Latitude: " + latitude + "\n" + "Longitude: " + longitude);
-            } else {
-                Toast.makeText(this, "Unable to find location.", Toast.LENGTH_SHORT).show();
-            }
+        else
+        {
+            Toast.makeText(this, "Give Permission to get Location !", Toast.LENGTH_SHORT).show();
         }
     }
 
-    private void DisplayTrack(String source, String destination) {
+    @SuppressLint("MissingPermission")
+    private String getCurrentLocation() {
+        LocationManager locationManager = (LocationManager) getSystemService(Context.LOCATION_SERVICE);
+        if (locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER) || locationManager.isProviderEnabled(LocationManager.NETWORK_PROVIDER)) {
+
+            fusedLocationProviderClient.getLastLocation().addOnCompleteListener(new OnCompleteListener<Location>() {
+                @Override
+                public void onComplete(@NonNull Task<Location> task) {
+                 Location location = task.getResult();
+                 if(location!=null)
+                 {
+                     latitude = String.valueOf(location.getLatitude());
+                     longitude = String.valueOf(location.getLongitude());
+
+                     System.out.println("details:"+latitude+","+longitude);
+
+                     DisplayTrack(latitude,longitude,etsource.getText().toString().trim());
+
+                 }
+                 else
+                 {
+                     LocationRequest locationRequest = new LocationRequest()
+                             .setPriority(LocationRequest.PRIORITY_HIGH_ACCURACY)
+                             .setInterval(10000)
+                             .setFastestInterval(1000)
+                             .setNumUpdates(1);
+
+                     LocationCallback locationCallback = new LocationCallback(){
+                         @Override
+                         public void onLocationResult(LocationResult locationResult) {
+                             Location location1 = locationResult.getLastLocation();
+                             latitude = String.valueOf(location1.getLatitude());
+                             longitude = String.valueOf(location1.getLongitude());
+                             DisplayTrack(latitude,longitude,etsource.getText().toString().trim());
+                         }
+                     };
+
+                     fusedLocationProviderClient.requestLocationUpdates(locationRequest,locationCallback
+                     , Looper.myLooper());
+                 }
+                }
+            });
+        }
+        else
+        {
+            startActivity(new Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS)
+            .setFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
+        }
+        return (latitude+","+longitude);
+    }
+
+    private void DisplayTrack(String latitude, String longitude,String destination) {
         try{
             //Uri uri = Uri.parse("https://www.google.co.in/maps/dir/"+source+"/"+destination);
-            Uri uri = Uri.parse("https://www.google.com/maps/dir/"+(latitude)+",+"+(longitude)+"/"+source);
+            System.out.println("details for track :"+latitude+","+longitude);
+            Uri uri = Uri.parse("https://www.google.com/maps/dir/"+(latitude)+",+"+(longitude)+"/"+destination);
             Intent i = new Intent(Intent.ACTION_VIEW,uri);
             i.setPackage("com.google.android.apps.maps");
             i.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
@@ -148,6 +186,8 @@ public class MainActivity extends AppCompatActivity {
             startActivity(in);
         }
     }
+
+
 
 
 
